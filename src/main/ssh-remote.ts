@@ -527,14 +527,21 @@ export async function sshReadEnv(config: SshConfig, profile?: string): Promise<R
     if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))) v = v.slice(1, -1);
     if (v) result[k] = v;
   }
-  // Alias alternate env var names so the app can display them regardless of which name the server uses
-  const ENV_ALIASES: Array<[string, string]> = [
-    ["HA_URL", "HOMEASSISTANT_URL"],
-    ["HA_TOKEN", "HOMEASSISTANT_TOKEN"],
+  // Home Assistant has accumulated three naming conventions across hermes
+  // versions: HASS_* (what gateway/config.py currently reads), HOMEASSISTANT_*
+  // (legacy), and HA_* (older desktop builds). Mirror all three so the UI
+  // can display the value regardless of which one the remote server uses.
+  const HA_ALIAS_GROUPS: string[][] = [
+    ["HASS_URL", "HOMEASSISTANT_URL", "HA_URL"],
+    ["HASS_TOKEN", "HOMEASSISTANT_TOKEN", "HA_TOKEN"],
   ];
-  for (const [appKey, serverKey] of ENV_ALIASES) {
-    if (!result[appKey] && result[serverKey]) result[appKey] = result[serverKey];
-    if (!result[serverKey] && result[appKey]) result[serverKey] = result[appKey];
+  for (const group of HA_ALIAS_GROUPS) {
+    const present = group.find((k) => result[k]);
+    if (!present) continue;
+    const value = result[present];
+    for (const k of group) {
+      if (!result[k]) result[k] = value;
+    }
   }
   return result;
 }

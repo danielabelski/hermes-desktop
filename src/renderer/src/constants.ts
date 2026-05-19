@@ -636,13 +636,13 @@ export const GATEWAY_SECTIONS: SectionDef[] = [
         hint: "constants.webhookHint",
       },
       {
-        key: "HA_URL",
+        key: "HASS_URL",
         label: "constants.haUrl",
         type: "text",
         hint: "constants.haUrlHint",
       },
       {
-        key: "HA_TOKEN",
+        key: "HASS_TOKEN",
         label: "constants.haToken",
         type: "password",
         hint: "constants.haTokenHint",
@@ -763,7 +763,7 @@ export const GATEWAY_PLATFORMS: PlatformDef[] = [
     key: "home_assistant",
     label: "constants.platformHomeAssistant",
     description: "constants.platformHomeAssistantDesc",
-    fields: ["HA_URL", "HA_TOKEN"],
+    fields: ["HASS_URL", "HASS_TOKEN"],
   },
 ];
 
