@@ -282,11 +282,13 @@ function Layout({
       await window.hermesAPI.installUpdate();
     } else if (updateState === "error") {
       // Retry the auto-download that failed.
+      // Set downloading state immediately to prevent re-entrancy (double-click).
+      setUpdateState("downloading");
       setUpdateError(null);
       try {
         const ok = await window.hermesAPI.downloadUpdate();
         if (!ok) setUpdateState("error");
-        else setUpdateState(null);
+        // On success, we wait for the onUpdateDownloaded callback to set "ready"
       } catch (err) {
         setUpdateError(err instanceof Error ? err.message : String(err));
         setUpdateState("error");
