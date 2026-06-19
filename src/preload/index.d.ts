@@ -1,5 +1,6 @@
 import type { AppLocale } from "../shared/i18n/types";
 import type { Attachment } from "../shared/attachments";
+import type { SessionModelOverride } from "../shared/model-override";
 import type { DesktopSessionContinuationItem } from "../shared/session-continuation";
 import type { DesktopSessionLocalError } from "../shared/session-continuation";
 import type {
@@ -368,7 +369,7 @@ interface HermesAPI {
     attachments?: Attachment[],
     contextFolder?: string,
     runId?: string,
-    modelOverride?: string,
+    modelOverride?: SessionModelOverride,
   ) => Promise<{ response: string; sessionId?: string }>;
   abortChat: (runId?: string) => Promise<void>;
   transcribeAudio: (

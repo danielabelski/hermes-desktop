@@ -43,14 +43,21 @@ vi.mock("./utils", () => ({
 vi.mock("./gateway-ports", () => ({ getProfilePort: vi.fn(() => 8642) }));
 vi.mock("./models", () => ({ readModels: vi.fn(() => []) }));
 vi.mock("./secrets", () => ({ providerListSafe: vi.fn(() => ({})) }));
+vi.mock("child_process", () => {
+  const spawn = vi.fn();
+  return { spawn, ChildProcess: class {}, default: { spawn } };
+});
 
+import { spawn } from "child_process";
 import { getModelConfig, readEnv } from "./config";
 import { providerListSafe } from "./secrets";
-import { transcribeAudio } from "./hermes";
+import { sendMessage, stopHealthPolling, transcribeAudio } from "./hermes";
+import type { ChatCallbacks } from "./hermes";
 
 const mockedGetModelConfig = vi.mocked(getModelConfig);
 const mockedReadEnv = vi.mocked(readEnv);
 const mockedProviderListSafe = vi.mocked(providerListSafe);
+const mockedSpawn = vi.mocked(spawn);
 
 describe("transcribeAudio API-key resolution", () => {
   const fetchMock = vi.fn();
@@ -110,5 +117,68 @@ describe("transcribeAudio API-key resolution", () => {
     await transcribeAudio(new Uint8Array([1, 2, 3]), "audio/webm", "default");
 
     expect(sentAuthHeader()).toBe("Bearer from-vault");
+  });
+});
+
+describe("sendMessage session model override routing", () => {
+  const noopCallbacks: ChatCallbacks = {
+    onChunk: vi.fn(),
+    onDone: vi.fn(),
+    onError: vi.fn(),
+  };
+
+  function fakeChildProcess(): unknown {
+    return {
+      stdout: { on: vi.fn() },
+      stderr: { on: vi.fn() },
+      on: vi.fn(),
+      kill: vi.fn(),
+      killed: false,
+    };
+  }
+
+  function cliArgs(): string[] {
+    expect(mockedSpawn).toHaveBeenCalledTimes(1);
+    return mockedSpawn.mock.calls[0][1] as string[];
+  }
+
+  beforeEach(() => {
+    mockedGetModelConfig.mockReset();
+    mockedReadEnv.mockReset();
+    mockedReadEnv.mockReturnValue({});
+    mockedProviderListSafe.mockReset();
+    mockedProviderListSafe.mockReturnValue({});
+    mockedSpawn.mockReset();
+    mockedSpawn.mockReturnValue(fakeChildProcess() as ReturnType<typeof spawn>);
+    // Persisted default: GPT-5.5 on the (sticky) OpenAI-Codex provider.
+    mockedGetModelConfig.mockReturnValue({
+      provider: "openai-codex",
+      model: "gpt-5.5",
+      baseUrl: "https://chatgpt.com/backend-api/codex",
+    } as ReturnType<typeof getModelConfig>);
+  });
+
+  afterEach(() => {
+    stopHealthPolling();
+  });
+
+  // @lat: [[model-selection#Session model override#Cross-provider switch routes via CLI]]
+  it("routes a cross-provider override through the CLI with its provider + model", async () => {
+    await sendMessage(
+      "hello",
+      noopCallbacks,
+      "default",
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      { provider: "gemini", model: "gemini-2.5-pro", baseUrl: "" },
+    );
+
+    const args = cliArgs();
+    expect(args).toContain("-m");
+    expect(args[args.indexOf("-m") + 1]).toBe("gemini-2.5-pro");
+    expect(args).toContain("--provider");
+    expect(args[args.indexOf("--provider") + 1]).toBe("gemini");
   });
 });

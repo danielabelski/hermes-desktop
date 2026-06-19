@@ -12,7 +12,10 @@ import { WebPreviewPanel } from "./WebPreviewPanel";
 import { useChatScroll } from "./hooks/useChatScroll";
 import { useChatIPC } from "./hooks/useChatIPC";
 import { useChatActions, parseBackgroundCommand } from "./hooks/useChatActions";
-import { useModelConfig } from "./hooks/useModelConfig";
+import {
+  useModelConfig,
+  effectiveOverrideBaseUrl,
+} from "./hooks/useModelConfig";
 import { useFastMode } from "./hooks/useFastMode";
 import { useReasoningEffort } from "./hooks/useReasoningEffort";
 import { useLocalCommands } from "./hooks/useLocalCommands";
@@ -25,6 +28,7 @@ import { buildChatTranscript } from "./transcriptUtils";
 import { ConfigHealthBanner } from "../../components/ConfigHealthBanner";
 import FollowUsModal from "../../components/FollowUsModal";
 import type { Attachment } from "../../../../shared/attachments";
+import type { SessionModelOverride } from "../../../../shared/model-override";
 import type { ActiveTurn, ChatMessage, UsageState } from "./types";
 import type { ContextUsage } from "./ContextGauge";
 import { contextWindowForModel } from "./contextWindows";
@@ -128,7 +132,7 @@ function Chat({
   // TUI gateway bypass in sendMessageViaBestApi is not triggered for normal
   // chats where the user never changed the model (issue #688).
   const [sessionModelOverride, setSessionModelOverride] = useState<
-    string | undefined
+    SessionModelOverride | undefined
   >(undefined);
   const dragCounter = useRef(0);
   const chatInputRef = useRef<ChatInputHandle>(null);
@@ -399,6 +403,9 @@ function Chat({
     setMessages([]);
     setHermesSessionId(null);
     setContextFolder(null);
+    // Clearing the conversation reverts to the global default model — the
+    // session-scoped pick belongs to the conversation being cleared (#688).
+    setSessionModelOverride(undefined);
     activeTurnRef.current = null;
     setUsage(null);
     setToolProgress(null);
@@ -778,7 +785,18 @@ function Chat({
                   void modelConfig.selectModel(provider, model, baseUrl, {
                     persist: false,
                   });
-                  setSessionModelOverride(model || undefined);
+                  // Carry the full identity (not just the model name) so a
+                  // cross-provider switch reaches the right backend. Mirror the
+                  // baseUrl rule selectModel applies so they can't drift.
+                  setSessionModelOverride(
+                    model
+                      ? {
+                          provider,
+                          model,
+                          baseUrl: effectiveOverrideBaseUrl(provider, baseUrl),
+                        }
+                      : undefined,
+                  );
                 }}
               />
               <ReasoningEffortPicker
