@@ -8,11 +8,15 @@ import { ModelPicker } from "./ModelPicker";
 import { ReasoningEffortPicker } from "./ReasoningEffortPicker";
 import { ContextFolderChip } from "./ContextFolderChip";
 import { WorktreePanel } from "./WorktreePanel";
+import { RemoteFolderPicker } from "./RemoteFolderPicker";
 import { WebPreviewPanel } from "./WebPreviewPanel";
 import { useChatScroll } from "./hooks/useChatScroll";
 import { useChatIPC } from "./hooks/useChatIPC";
 import { useChatActions, parseBackgroundCommand } from "./hooks/useChatActions";
-import { useModelConfig } from "./hooks/useModelConfig";
+import {
+  useModelConfig,
+  effectiveOverrideBaseUrl,
+} from "./hooks/useModelConfig";
 import { useFastMode } from "./hooks/useFastMode";
 import { useReasoningEffort } from "./hooks/useReasoningEffort";
 import { useLocalCommands } from "./hooks/useLocalCommands";
@@ -25,6 +29,7 @@ import { buildChatTranscript } from "./transcriptUtils";
 import { ConfigHealthBanner } from "../../components/ConfigHealthBanner";
 import FollowUsModal from "../../components/FollowUsModal";
 import type { Attachment } from "../../../../shared/attachments";
+import type { SessionModelOverride } from "../../../../shared/model-override";
 import type { ActiveTurn, ChatMessage, UsageState } from "./types";
 import type { ContextUsage } from "./ContextGauge";
 import { contextWindowForModel } from "./contextWindows";
@@ -114,12 +119,50 @@ function Chat({
     "auto" | "dashboard" | "legacy"
   >("auto");
   const [connectionModeLoaded, setConnectionModeLoaded] = useState(false);
-  // Working folder bound to this conversation (issue #27). Per-conversation,
-  // held in memory; reset on session switch / new chat below.
+  // Working folder bound to this conversation (issue #27). Per-conversation;
+  // persisted per session so a re-opened conversation restores its folder, and
+  // reset on new chat below.
   const [contextFolder, setContextFolder] = useState<string | null>(null);
+  // Gate folder persistence until the stored value for a resumed session has
+  // been loaded — otherwise the initial null would overwrite the saved folder
+  // before the load resolves. A brand-new chat (no initialSessionId) has
+  // nothing to load, so it starts unblocked.
+  const contextFolderLoadedRef = useRef<boolean>(!initialSessionId);
+
+  // Restore the folder linked to a resumed session (once, on mount).
+  useEffect(() => {
+    if (!initialSessionId) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const folder =
+          await window.hermesAPI.getSessionContextFolder(initialSessionId);
+        if (!cancelled && folder) setContextFolder(folder);
+      } catch {
+        /* best-effort — a missing folder just leaves the session unlinked */
+      } finally {
+        if (!cancelled) contextFolderLoadedRef.current = true;
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [initialSessionId]);
+
+  // Persist the linked folder for this session whenever it changes, once a
+  // gateway session id exists. Gated on the load above so a resumed session's
+  // stored folder is never clobbered by the initial null.
+  useEffect(() => {
+    if (!hermesSessionId || !contextFolderLoadedRef.current) return;
+    void window.hermesAPI.setSessionContextFolder(
+      hermesSessionId,
+      contextFolder,
+    );
+  }, [hermesSessionId, contextFolder]);
   // Whether the worktree panel is visible (only applies when contextFolder is set)
   // Default false so the panel doesn't open automatically and interfere with scrolling
   const [worktreeVisible, setWorktreeVisible] = useState<boolean>(false);
+  const [folderPickerOpen, setFolderPickerOpen] = useState<boolean>(false);
   const [webPreviewVisible, setWebPreviewVisible] = useState<boolean>(false);
   const [webPreviewUrl, setWebPreviewUrl] =
     useState<string>("https://google.com");
@@ -128,8 +171,9 @@ function Chat({
   // TUI gateway bypass in sendMessageViaBestApi is not triggered for normal
   // chats where the user never changed the model (issue #688).
   const [sessionModelOverride, setSessionModelOverride] = useState<
-    string | undefined
+    SessionModelOverride | undefined
   >(undefined);
+  const sessionModelOverrideLoadedRef = useRef<boolean>(!initialSessionId);
   const dragCounter = useRef(0);
   const chatInputRef = useRef<ChatInputHandle>(null);
   const queueRef = useRef<QueuedMessage[]>([]);
@@ -189,6 +233,57 @@ function Chat({
 
   const { containerRef, bottomRef } = useChatScroll(messages);
   const modelConfig = useModelConfig(profile);
+  const chatCurrentModel =
+    sessionModelOverride?.model ?? modelConfig.currentModel;
+  const chatCurrentProvider =
+    sessionModelOverride?.provider ?? modelConfig.currentProvider;
+  const chatCurrentBaseUrl =
+    sessionModelOverride?.baseUrl ?? modelConfig.currentBaseUrl;
+  const chatDisplayModel = sessionModelOverride?.model
+    ? sessionModelOverride.model.split("/").pop() || sessionModelOverride.model
+    : modelConfig.displayModel;
+
+  // Restore the model/provider linked to a resumed session. The saved value is
+  // applied only to this chat's local picker state (`persist:false`) so it never
+  // rewrites the global config.yaml default.
+  useEffect(() => {
+    if (!initialSessionId) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const override =
+          await window.hermesAPI.getSessionModelOverride(initialSessionId);
+        if (!cancelled && override) {
+          setSessionModelOverride(override);
+          await modelConfig.selectModel(
+            override.provider,
+            override.model,
+            override.baseUrl,
+            { persist: false },
+          );
+        }
+      } catch {
+        /* best-effort — sessions without a saved pick use the global default */
+      } finally {
+        if (!cancelled) sessionModelOverrideLoadedRef.current = true;
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [initialSessionId, modelConfig.selectModel]);
+
+  // Persist the chat-local model/provider once a session exists. This stores
+  // only routing identity, never API keys, and is gated so a resumed session's
+  // initial undefined state cannot erase its saved model before restore.
+  useEffect(() => {
+    if (!hermesSessionId || !sessionModelOverrideLoadedRef.current) return;
+    void window.hermesAPI.setSessionModelOverride(
+      hermesSessionId,
+      sessionModelOverride ?? null,
+    );
+  }, [hermesSessionId, sessionModelOverride]);
+
   const {
     fastMode,
     toggle: toggleFastMode,
@@ -222,12 +317,7 @@ function Chat({
     return (): void => {
       cancelled = true;
     };
-  }, [
-    profile,
-    modelConfig.currentModel,
-    modelConfig.currentProvider,
-    modelConfig.currentBaseUrl,
-  ]);
+  }, [profile, chatCurrentModel, chatCurrentProvider, chatCurrentBaseUrl]);
 
   // Authoritative context-window size for the active model, resolved from the
   // provider's /models catalogue (issue #597). Null until/unless the provider
@@ -238,12 +328,12 @@ function Chat({
   useEffect(() => {
     let cancelled = false;
     setRealContextWindow(null);
-    if (!modelConfig.currentModel) return;
+    if (!chatCurrentModel) return;
     window.hermesAPI
       .getModelContextWindow(
-        modelConfig.currentProvider,
-        modelConfig.currentModel,
-        modelConfig.currentBaseUrl,
+        chatCurrentProvider,
+        chatCurrentModel,
+        chatCurrentBaseUrl,
         profile,
       )
       .then((w) => {
@@ -257,12 +347,7 @@ function Chat({
     return (): void => {
       cancelled = true;
     };
-  }, [
-    profile,
-    modelConfig.currentModel,
-    modelConfig.currentProvider,
-    modelConfig.currentBaseUrl,
-  ]);
+  }, [profile, chatCurrentModel, chatCurrentProvider, chatCurrentBaseUrl]);
 
   const visibleSessionScopeId = messages.length === 0 ? null : hermesSessionId;
 
@@ -399,12 +484,16 @@ function Chat({
     setMessages([]);
     setHermesSessionId(null);
     setContextFolder(null);
+    // Clearing the conversation reverts to the global default model — the
+    // session-scoped pick belongs to the conversation being cleared (#688).
+    setSessionModelOverride(undefined);
+    void modelConfig.reload();
     activeTurnRef.current = null;
     setUsage(null);
     setToolProgress(null);
     queueRef.current = [];
     setQueuedMessages([]);
-  }, [isLoading, runId, hermesSessionId, setMessages]);
+  }, [isLoading, runId, hermesSessionId, setMessages, modelConfig.reload]);
 
   const localCommands = useLocalCommands({
     profile,
@@ -434,10 +523,10 @@ function Chat({
     fallbackOnUnavailable: chatTransportPreference === "auto",
     hermesSessionId,
     messages,
-    model: modelConfig.currentModel,
-    modelBaseUrl: modelConfig.currentBaseUrl,
+    model: chatCurrentModel,
+    modelBaseUrl: chatCurrentBaseUrl,
     profile,
-    provider: modelConfig.currentProvider,
+    provider: chatCurrentProvider,
     setHermesSessionId,
     setIsLoading,
     setMessages,
@@ -551,9 +640,13 @@ function Chat({
   }, []);
 
   const handlePickFolder = useCallback(async () => {
+    if (remoteMode) {
+      setFolderPickerOpen(true);
+      return;
+    }
     const path = await window.hermesAPI.selectFolder();
     if (path) setContextFolder(path);
-  }, []);
+  }, [remoteMode]);
 
   const handleClearFolder = useCallback(() => {
     setContextFolder(null);
@@ -612,8 +705,7 @@ function Chat({
   const contextUsage: ContextUsage | null = usage?.contextTokens
     ? {
         used: usage.contextTokens,
-        window:
-          realContextWindow ?? contextWindowForModel(modelConfig.currentModel),
+        window: realContextWindow ?? contextWindowForModel(chatCurrentModel),
         cacheReadTokens: usage.cacheReadTokens,
         cacheWriteTokens: usage.cacheWriteTokens,
       }
@@ -768,17 +860,28 @@ function Chat({
           toolbarExtras={
             <>
               <ModelPicker
-                currentModel={modelConfig.currentModel}
-                currentProvider={modelConfig.currentProvider}
-                currentBaseUrl={modelConfig.currentBaseUrl}
+                currentModel={chatCurrentModel}
+                currentProvider={chatCurrentProvider}
+                currentBaseUrl={chatCurrentBaseUrl}
                 modelGroups={modelConfig.modelGroups}
-                displayModel={modelConfig.displayModel}
+                displayModel={chatDisplayModel}
                 onOpen={modelConfig.reload}
                 onSelectModel={(provider, model, baseUrl) => {
                   void modelConfig.selectModel(provider, model, baseUrl, {
                     persist: false,
                   });
-                  setSessionModelOverride(model || undefined);
+                  // Carry the full identity (not just the model name) so a
+                  // cross-provider switch reaches the right backend. Mirror the
+                  // baseUrl rule selectModel applies so they can't drift.
+                  setSessionModelOverride(
+                    model
+                      ? {
+                          provider,
+                          model,
+                          baseUrl: effectiveOverrideBaseUrl(provider, baseUrl),
+                        }
+                      : undefined,
+                  );
                 }}
               />
               <ReasoningEffortPicker
@@ -806,7 +909,7 @@ function Chat({
               </div>
               <ContextFolderChip
                 contextFolder={contextFolder}
-                show={!remoteMode}
+                show
                 worktreeVisible={worktreeVisible}
                 onPickFolder={handlePickFolder}
                 onClearFolder={handleClearFolder}
@@ -848,6 +951,15 @@ function Chat({
           </div>
         </div>
       )}
+      <RemoteFolderPicker
+        initialPath={contextFolder}
+        open={folderPickerOpen}
+        onCancel={() => setFolderPickerOpen(false)}
+        onSelect={(path) => {
+          setContextFolder(path);
+          setFolderPickerOpen(false);
+        }}
+      />
       {/* Show follow-us modal only after setup is complete */}
       {active && connectionModeLoaded && readiness.ok && <FollowUsModal />}
     </div>

@@ -18,6 +18,11 @@ interface WorktreePanelProps {
   folderPath: string;
 }
 
+const MIN_PANEL_WIDTH = 220;
+const WIDTH_STORAGE_KEY = "hermes:worktreePanelWidth";
+const maxPanelWidth = (): number =>
+  Math.max(MIN_PANEL_WIDTH, window.innerWidth - 360);
+
 interface TreeItemProps {
   entry: FileEntry;
   parentPath: string;
@@ -153,6 +158,41 @@ export const WorktreePanel = memo(function WorktreePanel({
   const [error, setError] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
   const [terminalError, setTerminalError] = useState<string | null>(null);
+  const [width, setWidth] = useState<number>(() => {
+    const saved = Number(localStorage.getItem(WIDTH_STORAGE_KEY));
+    return Number.isFinite(saved) && saved >= MIN_PANEL_WIDTH ? saved : 240;
+  });
+  const [isResizing, setIsResizing] = useState(false);
+
+  const startResize = (e: React.PointerEvent): void => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startWidth = width;
+    let nextWidth = startWidth;
+    setIsResizing(true);
+    document.body.style.userSelect = "none";
+    document.body.style.cursor = "col-resize";
+
+    const onMove = (ev: PointerEvent): void => {
+      // Panel sits on the right edge, so dragging the handle left widens it.
+      const delta = startX - ev.clientX;
+      nextWidth = Math.min(
+        maxPanelWidth(),
+        Math.max(MIN_PANEL_WIDTH, startWidth + delta),
+      );
+      setWidth(nextWidth);
+    };
+    const onUp = (): void => {
+      setIsResizing(false);
+      document.body.style.userSelect = "";
+      document.body.style.cursor = "";
+      localStorage.setItem(WIDTH_STORAGE_KEY, String(Math.round(nextWidth)));
+      document.removeEventListener("pointermove", onMove);
+      document.removeEventListener("pointerup", onUp);
+    };
+    document.addEventListener("pointermove", onMove);
+    document.addEventListener("pointerup", onUp);
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -195,7 +235,14 @@ export const WorktreePanel = memo(function WorktreePanel({
   };
 
   return (
-    <div className="worktree-panel">
+    <div className="worktree-panel" style={{ width }}>
+      <div
+        className={`worktree-resize-handle ${
+          isResizing ? "worktree-resize-handle-active" : ""
+        }`}
+        onPointerDown={startResize}
+        title="Drag to resize"
+      />
       <div className="worktree-header">
         <Folder size={16} className="worktree-header-icon" />
         <span className="worktree-header-title" title={folderPath}>

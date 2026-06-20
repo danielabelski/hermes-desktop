@@ -16,6 +16,7 @@ export {
   ExternalLink,
   KeyRound,
   Layers,
+  Loader,
   Monitor,
   Moon,
   PanelLeftClose,

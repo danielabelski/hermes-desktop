@@ -1418,15 +1418,38 @@ body {
   gap: 2px;
 }
 
+/* The Chat item and its chevron read as one container: the row owns the
+   hover/active background while the two buttons inside stay transparent and
+   remain separate click targets (Chat navigates, chevron toggles the list). */
 .sidebar-nav-row {
   display: flex;
   align-items: center;
   gap: 2px;
+  border-radius: var(--radius-md);
+  transition: background var(--transition);
 }
 
 .sidebar-nav-row .sidebar-nav-item {
   flex: 1;
   min-width: 0;
+}
+
+/* Inner buttons keep their text-color states but defer the background to the
+   row, so the highlight spans the whole container rather than just one half. */
+.sidebar-nav-row .sidebar-nav-item,
+.sidebar-nav-row .sidebar-nav-item:hover,
+.sidebar-nav-row .sidebar-nav-item.active {
+  background: none;
+}
+
+.sidebar-nav-row:hover {
+  background: var(--bg-tertiary);
+}
+
+/* Active wins over hover (higher specificity via :has), so hovering the active
+   row keeps the accent fill rather than flipping to the neutral hover tint. */
+.sidebar-nav-row:has(.sidebar-nav-item.active) {
+  background: var(--accent-subtle);
 }
 
 .sidebar-nav-chevron {
@@ -1442,12 +1465,31 @@ body {
   border-radius: var(--radius-md);
   color: var(--text-muted);
   cursor: pointer;
-  transition: all var(--transition);
+  transition: color var(--transition);
 }
 
-.sidebar-nav-chevron:hover {
-  background: var(--bg-tertiary);
+.sidebar-nav-row .sidebar-nav-chevron:hover {
+  /* Background comes from the row; just brighten the icon on hover. */
+  background: none;
   color: var(--text-primary);
+}
+
+/* Collapsed sidebar shows only the icon (no chevron), so revert to the
+   per-item background — a full-width row fill would extend past the 40px icon. */
+.sidebar-collapsed .sidebar-nav-row:hover {
+  background: none;
+}
+
+.sidebar-collapsed .sidebar-nav-row:has(.sidebar-nav-item.active) {
+  background: none;
+}
+
+.sidebar-collapsed .sidebar-nav-row .sidebar-nav-item:hover {
+  background: var(--bg-tertiary);
+}
+
+.sidebar-collapsed .sidebar-nav-row .sidebar-nav-item.active {
+  background: var(--accent-subtle);
 }
 
 .sidebar-recent-sessions-wrap {
@@ -1518,7 +1560,8 @@ body {
 }
 
 .sidebar-recent-session.active {
-  background: var(--accent-subtle);
+  /* Active state is shown by the bullet + text color only — no filled
+     background (keeps the list visually quiet). */
   color: var(--accent-text);
 }
 
@@ -1526,6 +1569,53 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* "Show more" affordance under the recent list — opens the full-list modal. */
+.sidebar-recent-sessions-more {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 6px 10px;
+  margin-top: 1px;
+  border: none;
+  background: none;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  text-align: left;
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-muted);
+  transition: all var(--transition);
+}
+
+.sidebar-recent-sessions-more-icon {
+  flex-shrink: 0;
+  color: var(--text-muted);
+}
+
+.sidebar-recent-sessions-more:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.sidebar-recent-sessions-more:hover .sidebar-recent-sessions-more-icon {
+  color: var(--text-primary);
+}
+
+/* Full-list sessions modal (sidebar "Show more" / Cmd+K). Reuses
+   .models-modal-overlay for the backdrop; sized to 80% of the viewport. */
+.sessions-modal {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-bright);
+  border-radius: var(--radius-lg);
+  width: 80vw;
+  height: 80vh;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.4);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 /* ── Profile avatar (shared: nav, active bar, manage page) ── */
@@ -2083,13 +2173,32 @@ body {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  position: relative;
+}
+
+/* Drag handle on the left edge to free-resize the context folder tree. */
+.worktree-resize-handle {
+  position: absolute;
+  left: -3px;
+  top: 0;
+  width: 7px;
+  height: 100%;
+  cursor: col-resize;
+  z-index: 20;
+  background: transparent;
+  transition: background var(--transition);
+}
+
+.worktree-resize-handle:hover,
+.worktree-resize-handle-active {
+  background: color-mix(in srgb, var(--accent-text) 45%, transparent);
 }
 
 .worktree-header {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 12px 14px;
+  padding: 7px 12px;
   border-bottom: 1px solid var(--border);
   background: var(--bg-tertiary);
   flex-shrink: 0;
@@ -2112,8 +2221,8 @@ body {
 }
 
 .worktree-header-action {
-  width: 32px;
-  height: 32px;
+  width: 26px;
+  height: 26px;
   flex-shrink: 0;
   display: inline-flex;
   align-items: center;
@@ -2133,8 +2242,8 @@ body {
 }
 
 .worktree-header-action svg {
-  width: 20px;
-  height: 20px;
+  width: 18px;
+  height: 18px;
   stroke-width: 2.2;
 }
 
@@ -2189,7 +2298,7 @@ body {
 }
 
 .worktree-folder-icon {
-  color: var(--accent-text);
+  color: rgba(255, 255, 255, 0.56);
 }
 
 .worktree-file-icon {
@@ -2568,11 +2677,239 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
+  color: rgba(255, 255, 255, 0.56);
 }
 
 .worktree-file-icon-wrapper svg {
   width: 100%;
   height: 100%;
+}
+
+.worktree-file-icon-wrapper svg * {
+  fill: currentColor !important;
+}
+
+.worktree-file-icon-wrapper svg [fill="none"],
+.worktree-file-icon-wrapper svg [style*="fill:none"] {
+  fill: none !important;
+}
+
+.worktree-file-icon-wrapper svg [stroke]:not([stroke="none"]),
+.worktree-file-icon-wrapper svg [style*="stroke:"] {
+  stroke: currentColor !important;
+}
+
+.folder-picker-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(0, 0, 0, 0.54);
+}
+
+.folder-picker-modal {
+  display: flex;
+  width: min(680px, calc(100vw - 32px));
+  max-height: min(620px, calc(100vh - 48px));
+  min-height: 420px;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text-primary);
+  box-shadow: 0 20px 70px rgba(0, 0, 0, 0.4);
+}
+
+.folder-picker-header,
+.folder-picker-footer {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.folder-picker-footer {
+  justify-content: flex-end;
+  border-top: 1px solid var(--border);
+  border-bottom: 0;
+}
+
+.folder-picker-title {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.folder-picker-title svg {
+  color: var(--accent-text);
+}
+
+.folder-picker-path-row {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px 8px;
+}
+
+.folder-picker-input {
+  min-width: 0;
+  flex: 1;
+  height: 30px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface-elevated);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  outline: none;
+  padding: 0 9px;
+}
+
+.folder-picker-input:focus {
+  border-color: var(--accent-text);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-text) 20%, transparent);
+}
+
+.folder-picker-icon-btn {
+  display: inline-flex;
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.folder-picker-icon-btn:hover:not(:disabled),
+.folder-picker-icon-btn:focus-visible {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+  outline: none;
+}
+
+.folder-picker-icon-btn:disabled {
+  cursor: default;
+  opacity: 0.35;
+}
+
+.folder-picker-breadcrumbs {
+  display: flex;
+  flex-shrink: 0;
+  gap: 4px;
+  overflow-x: auto;
+  padding: 0 12px 10px;
+  scrollbar-width: thin;
+}
+
+.folder-picker-crumb {
+  display: inline-flex;
+  max-width: 180px;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 4px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 12px;
+  padding: 4px 6px;
+}
+
+.folder-picker-crumb span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.folder-picker-crumb:hover,
+.folder-picker-crumb:focus-visible {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+  outline: none;
+}
+
+.folder-picker-list {
+  min-height: 0;
+  flex: 1;
+  overflow-y: auto;
+  padding: 4px 8px 8px;
+  scrollbar-width: thin;
+}
+
+.folder-picker-list:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent-text) 38%, transparent);
+  outline-offset: -2px;
+}
+
+.folder-picker-row {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  align-items: center;
+  gap: 9px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-primary);
+  cursor: pointer;
+  font-size: 13px;
+  padding: 7px 9px;
+  text-align: left;
+}
+
+.folder-picker-row svg {
+  flex-shrink: 0;
+  color: rgba(255, 255, 255, 0.58);
+}
+
+.folder-picker-row span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.folder-picker-row:hover,
+.folder-picker-row:focus-visible,
+.folder-picker-row-active {
+  background: var(--surface-hover);
+  outline: none;
+}
+
+.folder-picker-row-active {
+  color: var(--accent-text);
+}
+
+.folder-picker-state {
+  display: flex;
+  min-height: 180px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 16px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  text-align: center;
+}
+
+.folder-picker-loader {
+  animation: spin 0.9s linear infinite;
 }
 
 /* Worktree toggle button in header */

@@ -1,0 +1,82 @@
+import type Database from "better-sqlite3";
+import { getDbConnection } from "./db";
+
+/**
+ * Desktop-owned, per-session store for the working folder the user links to a
+ * conversation (issue #27). The folder is a desktop-only UI binding — the agent
+ * receives it per message as a context-folder system message — so it isn't part
+ * of hermes-agent's session schema. Persisting it here lets a re-opened session
+ * restore its linked folder instead of losing it when the app restarts.
+ *
+ * Mirrors the [[src/main/session-continuation-store.ts]] pattern: a desktop
+ * table in the active profile's state.db, keyed by `session_id`.
+ */
+const TABLE = "desktop_session_context_folders";
+
+function ensureTable(db: Database.Database): void {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS ${TABLE} (
+      session_id TEXT PRIMARY KEY,
+      folder_path TEXT NOT NULL,
+      updated_at REAL NOT NULL DEFAULT (strftime('%s', 'now'))
+    );
+  `);
+}
+
+function tableExists(db: Database.Database): boolean {
+  const row = db
+    .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name = ?")
+    .get(TABLE) as { name: string } | undefined;
+  return !!row;
+}
+
+/**
+ * Persist (or clear) the folder linked to a session. A null/empty folder
+ * removes the row so an unlinked session doesn't restore a stale path.
+ */
+export function setSessionContextFolder(
+  sessionId: string,
+  folder: string | null,
+): void {
+  if (!sessionId) return;
+  const db = getDbConnection(false);
+  if (!db) return;
+  ensureTable(db);
+
+  if (!folder) {
+    db.prepare(`DELETE FROM ${TABLE} WHERE session_id = ?`).run(sessionId);
+    return;
+  }
+
+  db.prepare(
+    `INSERT INTO ${TABLE} (session_id, folder_path, updated_at)
+     VALUES (?, ?, strftime('%s', 'now'))
+     ON CONFLICT(session_id) DO UPDATE SET
+       folder_path = excluded.folder_path,
+       updated_at = excluded.updated_at`,
+  ).run(sessionId, folder);
+}
+
+/** Read the folder linked to a session, or null when none is stored. */
+export function getSessionContextFolder(sessionId: string): string | null {
+  if (!sessionId) return null;
+  const db = getDbConnection(true);
+  if (!db || !tableExists(db)) return null;
+  const row = db
+    .prepare(`SELECT folder_path FROM ${TABLE} WHERE session_id = ?`)
+    .get(sessionId) as { folder_path: string } | undefined;
+  return row?.folder_path || null;
+}
+
+/**
+ * Drop a session's linked-folder row. Called from `deleteSessionRows` so it
+ * runs inside the same delete transaction as the other per-session cleanup.
+ */
+export function deleteSessionContextFolderForSession(
+  db: Database.Database,
+  sessionId: string,
+): void {
+  if (tableExists(db)) {
+    db.prepare(`DELETE FROM ${TABLE} WHERE session_id = ?`).run(sessionId);
+  }
+}

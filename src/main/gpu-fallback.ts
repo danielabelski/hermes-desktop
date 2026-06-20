@@ -92,7 +92,13 @@ export function applyGpuPreferences(): void {
   app.disableHardwareAcceleration();
   app.commandLine.appendSwitch("disable-gpu");
   app.commandLine.appendSwitch("disable-gpu-compositing");
-  app.commandLine.appendSwitch("disable-software-rasterizer");
+  // Keep the software (SwiftShader) rasterizer available so WebGL surfaces — the
+  // Office 3D tab — still render when hardware acceleration is off (VMs, headless
+  // GPUs, machines whose GPU process crashes). We deliberately do NOT pass
+  // --disable-software-rasterizer. Chromium 136 gates SwiftShader-backed WebGL
+  // behind --enable-unsafe-swiftshader, so opt in explicitly; without it WebGL
+  // context creation fails ("Could not create a WebGL context ... Disabled").
+  app.commandLine.appendSwitch("enable-unsafe-swiftshader");
 }
 
 /** Persist the disable-gpu flag. Returns false if the write failed so the

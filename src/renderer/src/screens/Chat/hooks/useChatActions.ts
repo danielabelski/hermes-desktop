@@ -3,6 +3,7 @@ import type { ChatInputHandle } from "../ChatInput";
 import { createTurn, shouldSendToAgent } from "../chatMessages";
 import type { SlashExecOutcome } from "../slashExec";
 import type { ActiveTurn, Attachment, ChatMessage } from "../types";
+import type { SessionModelOverride } from "../../../../../shared/model-override";
 
 /** Slash commands the desktop handles through its own renderer flow rather
  *  than the gateway slash pipeline: the approval responses, which the gateway
@@ -45,8 +46,9 @@ interface UseChatActionsArgs {
   /** Working folder bound to this conversation (issue #27), or null. */
   contextFolder: string | null;
   /** Session-local model override — selected via the chat picker without
-   *  persisting to config.yaml (issue #688). */
-  sessionModel?: string;
+   *  persisting to config.yaml (issue #688). Carries the full identity so a
+   *  cross-provider switch routes to the right backend, not just the model. */
+  sessionModel?: SessionModelOverride;
   sendViaDashboard?: (
     text: string,
     attachments?: Attachment[],

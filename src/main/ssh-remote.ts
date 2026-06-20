@@ -155,6 +155,62 @@ function pythonJsonInput(payload: unknown): string {
   return JSON.stringify(payload);
 }
 
+export interface SshDirectoryEntry {
+  name: string;
+  isDirectory: boolean;
+}
+
+export async function sshReadDirectory(
+  config: SshConfig,
+  remotePath: string,
+): Promise<SshDirectoryEntry[] | null> {
+  const script = `
+import json
+import os
+import sys
+
+payload = json.loads(sys.stdin.read() or "{}")
+raw = str(payload.get("path") or "")
+if raw.startswith("~/"):
+    raw = os.path.join(os.path.expanduser("~"), raw[2:])
+elif raw.startswith("$HOME/"):
+    raw = os.path.join(os.path.expanduser("~"), raw[6:])
+path = os.path.abspath(os.path.expanduser(raw or "."))
+rows = []
+for entry in os.scandir(path):
+    rows.append({
+        "name": entry.name,
+        "isDirectory": entry.is_dir(follow_symlinks=False),
+    })
+rows.sort(key=lambda item: (not item["isDirectory"], item["name"].lower(), item["name"]))
+print(json.dumps(rows))
+`;
+
+  try {
+    const out = await sshPython(
+      config,
+      script,
+      pythonJsonInput({ path: remotePath }),
+    );
+    const parsed = JSON.parse(out);
+    if (!Array.isArray(parsed)) return null;
+    return parsed
+      .filter(
+        (entry): entry is SshDirectoryEntry =>
+          entry !== null &&
+          typeof entry === "object" &&
+          typeof entry.name === "string" &&
+          typeof entry.isDirectory === "boolean",
+      )
+      .map((entry) => ({
+        name: entry.name,
+        isDirectory: entry.isDirectory,
+      }));
+  } catch {
+    return null;
+  }
+}
+
 async function sshReadFile(
   config: SshConfig,
   remotePath: string,

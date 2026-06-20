@@ -32,7 +32,6 @@ import VerifyWarningBanner from "../../components/VerifyWarningBanner";
 import hermeslogo from "../../assets/hermes-one.svg";
 import {
   ChatBubble,
-  Clock,
   Compass,
   Settings as SettingsIcon,
   Brain,
@@ -54,7 +53,6 @@ import { useI18n } from "../../components/useI18n";
 
 type View =
   | "chat"
-  | "sessions"
   | "discover"
   | "agents"
   | "office"
@@ -70,7 +68,6 @@ type View =
 
 const NAV_ITEMS: { view: View; icon: LucideIcon; labelKey: string }[] = [
   { view: "chat", icon: ChatBubble, labelKey: "navigation.chat" },
-  { view: "sessions", icon: Clock, labelKey: "navigation.sessions" },
   { view: "discover", icon: Compass, labelKey: "navigation.discover" },
   // "agents" (Profiles) is reached from the sidebar-footer ProfileSwitcher's
   // "Manage profiles" action rather than a top-level nav item.
@@ -176,8 +173,8 @@ function Layout({
       return false;
     }
   });
-  // Sessions nav section expanded → shows the last few chats inline
-  // (ChatGPT-style). Defaults to expanded; persisted across launches.
+  // Recent-sessions list under the Chat nav item expanded → shows the last few
+  // chats inline (ChatGPT-style). Defaults to expanded; persisted across launches.
   const [sessionsExpanded, setSessionsExpanded] = useState(() => {
     try {
       return localStorage.getItem(SESSIONS_EXPANDED_KEY) !== "false";
@@ -185,6 +182,10 @@ function Layout({
       return true;
     }
   });
+  // Full-list sessions modal (opened from the sidebar "Show more" affordance or
+  // the Cmd/Ctrl+K menu action). Reuses the Sessions screen inside a modal —
+  // there is no longer a top-level Sessions view.
+  const [sessionsModalOpen, setSessionsModalOpen] = useState(false);
   // Tabs lazy-mount on first visit, then stay mounted (display:none toggle).
   // Keeps IPC refetch / DOM rebuild off the tab-switch hot path.
   const [visitedViews, setVisitedViews] = useState<Set<View>>(
@@ -326,13 +327,23 @@ function Layout({
       handleNewChat();
     });
     const cleanupSearch = window.hermesAPI.onMenuSearchSessions(() => {
-      goTo("sessions");
+      setSessionsModalOpen(true);
     });
     return () => {
       cleanupNewChat();
       cleanupSearch();
     };
-  }, [handleNewChat, goTo]);
+  }, [handleNewChat]);
+
+  // Esc closes the full-list sessions modal.
+  useEffect(() => {
+    if (!sessionsModalOpen) return;
+    const onKeyDown = (e: KeyboardEvent): void => {
+      if (e.key === "Escape") setSessionsModalOpen(false);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [sessionsModalOpen]);
 
   // A run with no session, not loading and no title hasn't been used yet — a
   // blank "scratch" chat we can re-home to another agent without spawning a tab.
@@ -507,7 +518,10 @@ function Layout({
 
         <nav className="sidebar-nav">
           {NAV_ITEMS.map(({ view: v, icon: Icon, labelKey }) => {
-            if (v === "sessions") {
+            if (v === "chat") {
+              // The recent-sessions list lives under the Chat item (the
+              // standalone Sessions view was removed — the full list now opens
+              // in a modal via "Show more").
               const recentToggleLabel = sessionsExpanded
                 ? t("navigation.hideRecentSessions")
                 : t("navigation.showRecentSessions");
@@ -547,6 +561,7 @@ function Layout({
                     loadingSessionIds={loadingSessionIds}
                     resumingSessionId={resumingSessionId}
                     onSelect={handleResumeSession}
+                    onShowMore={() => setSessionsModalOpen(true)}
                   />
                 </div>
               );
@@ -642,14 +657,28 @@ function Layout({
           ))}
         </div>
 
-        {visitedViews.has("sessions") && (
-          <div style={paneStyle("sessions")}>
-            <Sessions
-              onResumeSession={handleResumeSession}
-              onNewChat={handleNewChat}
-              currentSessionId={currentSessionId}
-              visible={view === "sessions"}
-            />
+        {sessionsModalOpen && (
+          <div
+            className="models-modal-overlay"
+            onClick={() => setSessionsModalOpen(false)}
+          >
+            <div
+              className="sessions-modal"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <Sessions
+                onResumeSession={(id) => {
+                  setSessionsModalOpen(false);
+                  void handleResumeSession(id);
+                }}
+                onNewChat={() => {
+                  setSessionsModalOpen(false);
+                  handleNewChat();
+                }}
+                currentSessionId={currentSessionId}
+                visible={sessionsModalOpen}
+              />
+            </div>
           </div>
         )}
 

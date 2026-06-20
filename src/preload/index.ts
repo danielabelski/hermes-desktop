@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer, webUtils } from "electron";
 import type { AppLocale } from "../shared/i18n/types";
 import type { Attachment } from "../shared/attachments";
+import type { SessionModelOverride } from "../shared/model-override";
 import type { DesktopSessionContinuationItem } from "../shared/session-continuation";
 import type { DesktopSessionLocalError } from "../shared/session-continuation";
 import type {
@@ -368,7 +369,7 @@ const hermesAPI = {
     attachments?: Attachment[],
     contextFolder?: string,
     runId?: string,
-    modelOverride?: string,
+    modelOverride?: SessionModelOverride,
   ): Promise<{ response: string; sessionId?: string }> =>
     ipcRenderer.invoke(
       "send-message",
@@ -717,6 +718,26 @@ const hermesAPI = {
     error: DesktopSessionLocalError,
   ): Promise<boolean> =>
     ipcRenderer.invoke("record-session-local-error", sessionId, error),
+
+  getSessionContextFolder: (sessionId: string): Promise<string | null> =>
+    ipcRenderer.invoke("get-session-context-folder", sessionId),
+
+  setSessionContextFolder: (
+    sessionId: string,
+    folder: string | null,
+  ): Promise<boolean> =>
+    ipcRenderer.invoke("set-session-context-folder", sessionId, folder),
+
+  getSessionModelOverride: (
+    sessionId: string,
+  ): Promise<SessionModelOverride | null> =>
+    ipcRenderer.invoke("get-session-model-override", sessionId),
+
+  setSessionModelOverride: (
+    sessionId: string,
+    override: SessionModelOverride | null,
+  ): Promise<boolean> =>
+    ipcRenderer.invoke("set-session-model-override", sessionId, override),
 
   // Profiles
   listProfiles: (): Promise<

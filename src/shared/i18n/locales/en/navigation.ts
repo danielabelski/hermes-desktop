@@ -18,4 +18,5 @@ export default {
   expandSidebar: "Expand sidebar",
   showRecentSessions: "Show recent sessions",
   hideRecentSessions: "Hide recent sessions",
+  showMore: "Show more",
 } as const;

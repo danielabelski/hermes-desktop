@@ -7,6 +7,23 @@ import type { ModelGroup } from "../types";
 const OLLAMA_CLOUD_PROVIDER = "ollama-cloud";
 const OLLAMA_CLOUD_BASE_URL = "https://ollama.com/v1";
 
+/**
+ * Named providers (deepseek, groq, anthropic, …) have a hardcoded canonical
+ * base_url in hermes-agent's PROVIDER_REGISTRY, so a stored `baseUrl` on those
+ * entries can be stale and would misroute the request. Keep the baseUrl only
+ * for `custom` and `ollama-cloud` entries, where it is authoritative; clear it
+ * otherwise so the backend falls back to the provider's canonical URL. Shared
+ * by `selectModel` and the chat-screen session override so they can't drift.
+ */
+export function effectiveOverrideBaseUrl(
+  provider: string,
+  baseUrl: string,
+): string {
+  return provider === "custom" || provider === OLLAMA_CLOUD_PROVIDER
+    ? baseUrl
+    : "";
+}
+
 interface SavedModelForPicker {
   provider: string;
   model: string;
@@ -141,17 +158,7 @@ export function useModelConfig(profile?: string): UseModelConfigResult {
       baseUrl: string,
       { persist = true }: { persist?: boolean } = {},
     ): Promise<void> => {
-      // Named providers (deepseek, groq, anthropic, …) have a hardcoded
-      // canonical base_url in `hermes-agent`'s PROVIDER_REGISTRY.  A stored
-      // model entry that carries a stale `baseUrl` from an earlier confused
-      // save (e.g. a deepseek-tagged entry whose baseUrl points at the codex
-      // endpoint) would route the request to the wrong host.  Drop the
-      // baseUrl whenever the entry isn't `custom`; the gateway falls back
-      // to the provider's canonical URL.
-      const effectiveBaseUrl =
-        provider === "custom" || provider === OLLAMA_CLOUD_PROVIDER
-          ? baseUrl
-          : "";
+      const effectiveBaseUrl = effectiveOverrideBaseUrl(provider, baseUrl);
       setCurrentModel(model);
       setCurrentProvider(provider);
       setCurrentBaseUrl(effectiveBaseUrl);

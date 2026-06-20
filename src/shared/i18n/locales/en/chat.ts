@@ -148,6 +148,15 @@ export default {
     fileTruncated: "truncated",
     fileTruncatedWarning: "File is too large — showing first 100KB only",
   },
+  folderPicker: {
+    title: "Choose working directory",
+    parent: "Go to parent folder",
+    open: "Open",
+    select: "Select folder",
+    empty: "No folders here",
+    unavailable:
+      "This connection cannot list folders here. Enter the remote path and select it.",
+  },
   showWorktree: "Show file explorer",
   hideWorktree: "Hide file explorer",
   followUs: {
