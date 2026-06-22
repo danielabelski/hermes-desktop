@@ -11224,6 +11224,7 @@ body {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  opacity: 50%;
   /* Overscan slightly past the viewport so the video's bright top/bottom edge
      rows are clipped by the container's overflow:hidden instead of showing as
      thin white lines at the frame boundary. */
