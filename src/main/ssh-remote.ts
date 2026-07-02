@@ -2753,7 +2753,7 @@ const dashboardEnsurePromises = new Map<string, Promise<SshDashboardTarget | nul
 function dashboardCacheKey(config: SshConfig, _profile?: string): string {
   // Machine-scoped (NOT per-profile): the unified dashboard is one server for
   // all profiles, so all profiles share one cache/in-flight entry and one tunnel
-  // target. Keying per-profile would let concurrent profiles each ensure/​tunnel
+  // target. Keying per-profile would let concurrent profiles each ensure/tunnel
   // separately and thrash the single global tunnel.
   return `${config.host}:${config.port || 22}:${config.username}`;
 }

@@ -48,7 +48,12 @@ function normalizeRemoteDashboardBaseUrl(value: string): string {
   return url.toString().replace(/\/+$/, "");
 }
 
-function dashboardApiUrl(config: RemoteSessionConfig, path: string): string {
+// Exported so every dashboard request — including remote-metadata's /api/status
+// probe — shares ONE URL builder and gets the same `?profile=` scoping.
+export function dashboardApiUrl(
+  config: RemoteSessionConfig,
+  path: string,
+): string {
   const base = normalizeRemoteDashboardBaseUrl(config.remoteUrl);
   const url = new URL(path, `${base}/`);
   // Scope to the requested profile on the unified machine dashboard, unless the

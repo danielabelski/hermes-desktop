@@ -394,6 +394,16 @@ async function getSshDashboardSessionConfig(
   return { remoteUrl, apiKey: dash.token, profile };
 }
 
+// Most session/metadata IPC calls don't carry a profile, but the unified SSH
+// machine dashboard serves EVERY profile — an unscoped request silently
+// returns the DEFAULT profile's data (wrong session list / transcript for a
+// named-profile user). Fall back to the locally persisted active profile so
+// `dashboardApiUrl` appends `?profile=` ("default" needs no param and is
+// skipped there; explicit params like `profile=all` are never overridden).
+function activeSshProfile(profile?: string): string {
+  return profile?.trim() || getActiveProfileNameSync();
+}
+
 /**
  * Establish the SSH tunnel to the correct endpoint and cache the matching
  * credential — the remote dashboard (superset; dashboard-token auth) when
@@ -425,18 +435,27 @@ async function prepareSshTunnel(
   const { key, created } = await sshEnsureApiServerKey(conn.ssh, profile);
   const remotePort = await sshResolveApiServerPort(conn.ssh, profile);
   const running = await sshGatewayStatus(conn.ssh, profile);
+  let apiReady = true;
   if (!running) {
     // Down → start it. (A cold tunnel must not take over a healthy gateway,
     // hence the status check; but a stopped gateway must be started.)
     await sshStartGateway(conn.ssh, profile);
-    await sshWaitGatewayApiReady(conn.ssh, remotePort);
+    apiReady = await sshWaitGatewayApiReady(conn.ssh, remotePort);
   } else if (created) {
     // Up, but predates the key/enable we just wrote, so its api_server isn't
     // bound. Restart so it picks up the new env, then wait for /health.
     await sshStopGateway(conn.ssh, profile);
     await sshStartGateway(conn.ssh, profile);
-    await sshWaitGatewayApiReady(conn.ssh, remotePort);
+    apiReady = await sshWaitGatewayApiReady(conn.ssh, remotePort);
   }
+  // A false readiness result must FAIL setup — opening the tunnel and caching
+  // the key anyway reports success while /v1 isn't bound, so the first chat
+  // hits a confusing connection error later instead of a clear one here.
+  if (!apiReady)
+    throw new Error(
+      `Remote gateway api_server did not become ready on port ${remotePort} ` +
+        "(/health never answered). Check the gateway logs on the remote and retry.",
+    );
   await ensureSshTunnel({ ...conn.ssh, remotePort });
   setSshRemoteApiKey(key);
 }
@@ -626,6 +645,7 @@ export function registerIpcHandlers(context: IpcContext): void {
         conn,
         (config) => remoteGetHermesVersion(config),
         () => sshGetHermesVersion(conn.ssh),
+        activeSshProfile(),
       );
     return getHermesVersion();
   });
@@ -637,6 +657,7 @@ export function registerIpcHandlers(context: IpcContext): void {
         conn,
         (config) => remoteGetHermesVersion(config),
         () => sshGetHermesVersion(conn.ssh),
+        activeSshProfile(),
       );
     clearVersionCache();
     return getHermesVersion();
@@ -848,6 +869,7 @@ export function registerIpcHandlers(context: IpcContext): void {
         conn,
         (config) => remoteGetHermesHome(config),
         () => sshGetHermesHome(conn.ssh, profile),
+        activeSshProfile(profile),
       );
     return getHermesHome(profile);
   });
@@ -865,6 +887,7 @@ export function registerIpcHandlers(context: IpcContext): void {
         conn,
         (config) => remoteGetModelConfig(config),
         () => sshGetModelConfig(conn.ssh!, profile),
+        activeSshProfile(profile),
       );
     return getModelConfig(profile);
   });
@@ -933,6 +956,7 @@ export function registerIpcHandlers(context: IpcContext): void {
             }
             return true;
           },
+          activeSshProfile(profile),
         );
       }
       const prev = getModelConfig(profile);
@@ -1681,6 +1705,7 @@ export function registerIpcHandlers(context: IpcContext): void {
         conn,
         (config) => remoteListSessions(config, limit, offset),
         () => sshListSessions(conn.ssh, limit, offset),
+        activeSshProfile(),
       );
     return listSessions(limit, offset);
   });
@@ -1702,6 +1727,7 @@ export function registerIpcHandlers(context: IpcContext): void {
           sshGetSessionMessages(conn.ssh, sessionId).then((items) =>
             applySessionLocalOverlays(sessionId, items),
           ),
+        activeSshProfile(),
       );
     return getSessionMessages(sessionId);
   });
@@ -1774,8 +1800,11 @@ export function registerIpcHandlers(context: IpcContext): void {
     const conn = getConnectionConfig();
     if (conn.mode === "remote") return remoteDeleteSession(conn, sessionId);
     if (conn.mode === "ssh" && conn.ssh)
-      return withSshDashboardSessions(conn, (config) =>
-        remoteDeleteSession(config, sessionId),
+      return withSshDashboardSessions(
+        conn,
+        (config) => remoteDeleteSession(config, sessionId),
+        undefined,
+        activeSshProfile(),
       );
     return deleteSession(sessionId);
   });
@@ -1785,8 +1814,11 @@ export function registerIpcHandlers(context: IpcContext): void {
     const conn = getConnectionConfig();
     if (conn.mode === "remote") return remoteDeleteSessions(conn, ids);
     if (conn.mode === "ssh" && conn.ssh)
-      return withSshDashboardSessions(conn, (config) =>
-        remoteDeleteSessions(config, ids),
+      return withSshDashboardSessions(
+        conn,
+        (config) => remoteDeleteSessions(config, ids),
+        undefined,
+        activeSshProfile(),
       );
     return deleteSessions(ids);
   });
@@ -2011,6 +2043,7 @@ export function registerIpcHandlers(context: IpcContext): void {
           conn,
           (config) => remoteListCachedSessions(config, limit, offset),
           () => sshListCachedSessions(conn.ssh, limit, offset),
+          activeSshProfile(),
         );
       return listCachedSessions(limit, offset);
     },
@@ -2023,6 +2056,7 @@ export function registerIpcHandlers(context: IpcContext): void {
         conn,
         (config) => remoteListCachedSessions(config, 50),
         () => sshListCachedSessions(conn.ssh, 50),
+        activeSshProfile(),
       );
     try {
       return syncSessionCache();
@@ -2038,8 +2072,11 @@ export function registerIpcHandlers(context: IpcContext): void {
       if (conn.mode === "remote")
         return remoteUpdateSessionTitle(conn, sessionId, title);
       if (conn.mode === "ssh" && conn.ssh)
-        return withSshDashboardSessions(conn, (config) =>
-          remoteUpdateSessionTitle(config, sessionId, title),
+        return withSshDashboardSessions(
+          conn,
+          (config) => remoteUpdateSessionTitle(config, sessionId, title),
+          undefined,
+          activeSshProfile(),
         );
       return updateSessionTitle(sessionId, title);
     },
@@ -2054,6 +2091,7 @@ export function registerIpcHandlers(context: IpcContext): void {
         conn,
         (config) => remoteSearchSessions(config, query, limit),
         () => sshSearchSessions(conn.ssh, query, limit),
+        activeSshProfile(),
       );
     return searchSessions(query, limit);
   });

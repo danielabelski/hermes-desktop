@@ -109,6 +109,12 @@ function Providers({
   // the latest value when flushing pending debounces (a closure over
   // `env` directly would capture a stale snapshot).
   const envRef = useRef<Record<string, string>>({});
+  // True while config.yaml holds a custom/OpenAI-compatible endpoint. Lets
+  // the autosave guard tell apart "opened Local / Others but no URL picked
+  // yet" (skip the write) from "cleared a configured Base URL" (persist the
+  // clear — otherwise the UI shows an empty endpoint while config.yaml keeps
+  // the old one and chat silently continues on the stale provider).
+  const persistedCustomUrl = useRef(false);
 
   const loadConfig = useCallback(async (): Promise<void> => {
     const [envData, mc, pool] = await Promise.all([
@@ -120,6 +126,8 @@ function Providers({
     setModelProvider(displayProviderFromConfig(mc.provider, mc.baseUrl));
     setModelName(mc.model);
     setModelBaseUrl(mc.baseUrl);
+    persistedCustomUrl.current =
+      mc.provider === "custom" && Boolean(mc.baseUrl?.trim());
     setCredPool(pool);
 
     requestAnimationFrame(() => {
@@ -141,6 +149,8 @@ function Providers({
       setModelProvider(displayProviderFromConfig(mc.provider, mc.baseUrl));
       setModelName(mc.model);
       setModelBaseUrl(mc.baseUrl);
+      persistedCustomUrl.current =
+        mc.provider === "custom" && Boolean(mc.baseUrl?.trim());
       requestAnimationFrame(() => {
         modelLoaded.current = true;
       });
@@ -159,14 +169,24 @@ function Providers({
     // Don't persist an incomplete custom selection. Opening "Local / Others"
     // sets provider=custom before the user picks a preset/URL; saving custom
     // with an empty base_url would clobber config.yaml with a dead endpoint.
-    // Wait until a base URL exists (a preset click or a typed URL).
-    if (configProvider === "custom" && !modelBaseUrl.trim()) return;
+    // Wait until a base URL exists (a preset click or a typed URL) — UNLESS
+    // config.yaml already holds a custom endpoint: then the empty field is the
+    // user deliberately clearing it, and skipping the write would leave the UI
+    // (empty) and config.yaml (old URL) disagreeing after navigation/relaunch.
+    if (
+      configProvider === "custom" &&
+      !modelBaseUrl.trim() &&
+      !persistedCustomUrl.current
+    )
+      return;
     await window.hermesAPI.setModelConfig(
       configProvider,
       modelName,
       modelBaseUrl,
       profile,
     );
+    persistedCustomUrl.current =
+      configProvider === "custom" && Boolean(modelBaseUrl.trim());
     setModelSaved(true);
     setTimeout(() => setModelSaved(false), 2000);
   }, [modelProvider, modelName, modelBaseUrl, profile]);
