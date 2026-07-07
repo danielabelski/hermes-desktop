@@ -38,6 +38,7 @@ export const URL_KEY_MAP: ReadonlyArray<UrlKeyMapping> = [
   { pattern: /api\.mistral\.ai/i, envKey: "MISTRAL_API_KEY" },
   { pattern: /api\.perplexity\.ai/i, envKey: "PERPLEXITY_API_KEY" },
   { pattern: /api\.xiaomimimo\.com/i, envKey: "XIAOMI_API_KEY" },
+  { pattern: /dashscope(-intl)?\.aliyuncs\.com/i, envKey: "DASHSCOPE_API_KEY" },
 ];
 
 export const CUSTOM_API_KEY_ENV = "CUSTOM_API_KEY";

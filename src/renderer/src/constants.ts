@@ -12,6 +12,26 @@ export interface SectionDef {
   items: FieldDef[];
 }
 
+export const DASHSCOPE_ENDPOINTS = [
+  {
+    id: "cn",
+    name: "constants.dashscopeChinaEndpoint",
+    baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1",
+  },
+  {
+    id: "intl",
+    name: "constants.dashscopeIntlEndpoint",
+    baseUrl: "https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
+  },
+] as const;
+
+// UI-picker default only (mainland-first for the DashScope user base).
+// Deliberately NOT the agent's canonical default, which is the intl
+// endpoint — mirrored in main's PROVIDER_BASE_URLS (provider-registry.ts)
+// and used to fill an empty base_url on save. The picker writes base_url
+// explicitly, so this default never overrides a config silently.
+export const DEFAULT_DASHSCOPE_BASE_URL = DASHSCOPE_ENDPOINTS[0].baseUrl;
+
 // ── Providers ───────────────────────────────────────────
 
 export const PROVIDERS = {
@@ -43,7 +63,7 @@ export const PROVIDERS = {
     { value: "huggingface", label: "Hugging Face" },
     { value: "nvidia", label: "NVIDIA NIM" },
     { value: "zai", label: "Z.ai / GLM" },
-    { value: "qwen", label: "Qwen" },
+    { value: "alibaba", label: "Alibaba DashScope" },
     { value: "minimax", label: "MiniMax" },
     { value: "nous", label: "constants.nousName" },
     // Local OpenAI-compatible servers. Keep these explicit so users
@@ -86,7 +106,7 @@ export const PROVIDERS = {
     huggingface: "Hugging Face",
     nvidia: "NVIDIA NIM",
     zai: "Z.ai / GLM",
-    qwen: "Qwen",
+    alibaba: "Alibaba DashScope",
     minimax: "MiniMax",
     nous: "constants.nousName",
     lmstudio: "constants.lmstudio",
@@ -178,6 +198,18 @@ export const PROVIDERS = {
       placeholder: "AIza...",
       configProvider: "google",
       baseUrl: "",
+      needsKey: true,
+    },
+    {
+      id: "alibaba",
+      name: "Alibaba DashScope",
+      desc: "constants.dashscopeDesc",
+      tag: "",
+      envKey: "DASHSCOPE_API_KEY",
+      url: "https://bailian.console.aliyun.com/?apiKey=1",
+      placeholder: "sk-...",
+      configProvider: "alibaba",
+      baseUrl: DEFAULT_DASHSCOPE_BASE_URL,
       needsKey: true,
     },
     {
@@ -302,7 +334,7 @@ export const PROVIDER_CARDS: { id: string; name: string }[] = [
   { id: "zai", name: "Z.ai / GLM" },
   { id: "minimax", name: "MiniMax" },
   { id: "huggingface", name: "Hugging Face" },
-  { id: "qwen", name: "Qwen" },
+  { id: "alibaba", name: "Alibaba DashScope" },
   { id: "nous", name: "constants.nousName" },
   // "Local / Others" — this chip covers both local servers and any remote
   // OpenAI-compatible endpoint, so it isn't labelled just "Local".
@@ -562,6 +594,12 @@ export const SETTINGS_SECTIONS: SectionDef[] = [
         label: "constants.kimiApiKey",
         type: "password",
         hint: "constants.kimiHint",
+      },
+      {
+        key: "DASHSCOPE_API_KEY",
+        label: "constants.dashscopeApiKey",
+        type: "password",
+        hint: "constants.dashscopeHint",
       },
       {
         key: "MINIMAX_API_KEY",
