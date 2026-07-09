@@ -9426,6 +9426,81 @@ body {
   text-align: center;
 }
 
+/* Sync tab (per-profile cloud-sync controls). */
+.profile-sync-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.profile-sync-heading {
+  color: var(--text-primary);
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.profile-sync-subtitle {
+  margin-top: 4px;
+  color: var(--text-muted);
+  font-size: 13px;
+  max-width: 460px;
+}
+
+.profile-sync-body {
+  margin-top: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.profile-sync-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.profile-sync-label {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.profile-sync-value {
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.profile-sync-linked {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--success);
+}
+
+.profile-sync-note {
+  margin-top: 20px;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.profile-sync-note-warn {
+  color: var(--danger, #ef4444);
+}
+
+.profile-sync-warnings {
+  margin: 4px 0 0;
+  padding-left: 18px;
+  color: var(--text-muted);
+  font-size: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
 .profile-wallet-list {
   display: grid;
   gap: 12px;

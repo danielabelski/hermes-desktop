@@ -273,6 +273,7 @@ interface HermesAPI {
   // Cloud agent sync (profiles ↔ signed-in Hermes One account)
   syncAgents: () => Promise<AgentSyncResult>;
   getAgentSyncStatus: () => Promise<AgentSyncStatus>;
+  getLinkedAgentId: (profile: string) => Promise<string | null>;
   onAgentSyncUpdated: (
     callback: (result: AgentSyncResult) => void,
   ) => () => void;

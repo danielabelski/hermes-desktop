@@ -210,6 +210,8 @@ const hermesAPI = {
     ipcRenderer.invoke("agent-sync-run"),
   getAgentSyncStatus: (): Promise<AgentSyncStatus> =>
     ipcRenderer.invoke("agent-sync-status"),
+  getLinkedAgentId: (profile: string): Promise<string | null> =>
+    ipcRenderer.invoke("agent-sync-linked-id", profile),
   onAgentSyncUpdated: (
     callback: (result: AgentSyncResult) => void,
   ): (() => void) => {

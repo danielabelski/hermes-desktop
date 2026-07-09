@@ -21,13 +21,26 @@ can open and the modal can show it, then polls `/api/device/token` until the gra
 resolves. [[src/main/hermes-account.ts#cancelDeviceLogin]] stops an abandoned flow
 (single-flight, mirroring [[src/main/hermes-auth.ts#runHermesAuthLogin]]).
 
-The backend base URL resolves in [[src/main/hermes-account.ts#getApiUrl]]:
-runtime `HERMES_API_URL` (dev/user override) → build-time
-`MAIN_VITE_HERMES_API_URL` (baked in by the release workflow, same pattern as
-the renderer's `VITE_ANALYTICS_*`) → the local Nitro dev server
-(`http://localhost:3002`). An optional client key
-([[src/main/hermes-account.ts#getApiKey]], `MAIN_VITE_HERMES_API_KEY` /
-`HERMES_API_KEY`) is sent as `x-api-key` via
+The backend base URL is resolved fresh on every call by
+[[src/main/hermes-account.ts#getApiUrl]], **runtime env first** so switching
+backends is an env edit + relaunch (no rebuild): `HERMES_API_URL` (explicit
+override) → `MAIN_VITE_HERMES_API_URL` from `process.env` → the build-time
+baked `import.meta.env.MAIN_VITE_HERMES_API_URL` → `http://localhost:3002`.
+Because Vite inlines `import.meta.env` at *build* time, the `process.env` reads
+are what make it truly env-driven in dev — [[src/main/load-env.ts#loadDotEnvForDev]]
+copies the project `.env` into `process.env` at startup (dev only; called from
+[[src/main/index.ts]]), and packaged/CI builds carry the value baked in by the
+release workflow. The resolved value is normalized by
+[[src/main/api-url.ts#normalizeApiUrl]] — a remote `http://` origin is upgraded
+to `https://` (localhost stays http), because remote backends 301-redirect
+http→https and Node's fetch drops the `Authorization` header across that
+scheme-change redirect, so authenticated sync calls would 401 while anonymous
+device login still succeeds. [[src/main/account-store.ts#getAccount]] applies
+the same normalization when reading the `apiUrl` persisted in `account.json`, so
+a URL stored as http by an earlier login is corrected on read (the sync path
+uses that stored value) without a re-login. An optional client key
+([[src/main/hermes-account.ts#getApiKey]], same order with
+`MAIN_VITE_HERMES_API_KEY` / `HERMES_API_KEY`) is sent as `x-api-key` via
 [[src/main/hermes-account.ts#apiHeaders]] on all backend calls (device login
 and [[agent-sync|agent sync]]); the backend doesn't require it yet, and a key
 shipped in a desktop binary is extractable — abuse-limiting, not a secret.
@@ -79,5 +92,5 @@ Unit tests cover the two pieces that can break silently.
 public shape never leaks it, and checks logout and the "secure storage
 unavailable" guard. [[src/main/hermes-account.test.ts]] exercises
 [[src/main/hermes-account.ts#interpretTokenResponse]] across every RFC branch,
-the base-URL resolution order (runtime override → baked build-time value →
+the base-URL resolution order (runtime env → baked build-time value →
 localhost default), and the conditional `x-api-key` header.
